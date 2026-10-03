@@ -9,11 +9,11 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync, mkdtempSync } from 'node:fs'
+import { readFileSync, existsSync, mkdtempSync, symlinkSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { apply, name, inject } from '../lib/index.js'
 
@@ -178,6 +178,74 @@ test('抽帧输出里没有 null 值（宿主单类型 schema 不接受 null）'
     if (mode === 'scene') assert.equal(typeof out.sceneThreshold, 'number', 'scene 模式应给出 sceneThreshold')
     else assert.ok(!('sceneThreshold' in out), `${mode} 模式不该出现 sceneThreshold`)
   }
+})
+
+test('imageSize 能从 JPEG/PNG 字节里读出真实宽高', async () => {
+  // 来历：免费出图档会静默降采样（请求 1024x1024 实际给 768x768），
+  // 只报告请求尺寸会误导调用方。所以脚本改从字节里量真实尺寸，这里守住这个解析器。
+  const hasFfmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf8' }).status === 0
+  if (!hasFfmpeg) {
+    console.log('      SKIP：本机没有 ffmpeg，跳过 imageSize 解析测试')
+    return
+  }
+
+  const { imageSize } = await import(pathToFileURL(path.join(PACKAGE_ROOT, 'scripts', 'img.mjs')).href)
+  assert.equal(typeof imageSize, 'function', 'img.mjs 应导出 imageSize')
+
+  const tmp = mkdtempSync(path.join(tmpdir(), 'free-media-size-'))
+  const cases = [['jpg', 320, 240], ['png', 200, 150]]
+  for (const [ext, w, h] of cases) {
+    const f = path.join(tmp, `probe.${ext}`)
+    const r = spawnSync('ffmpeg', [
+      '-y', '-loglevel', 'error', '-f', 'lavfi',
+      '-i', `testsrc=size=${w}x${h}:rate=1:duration=1`,
+      '-frames:v', '1', f,
+    ], { encoding: 'utf8' })
+    assert.equal(r.status, 0, `生成 ${ext} 失败：${r.stderr}`)
+    assert.deepEqual(imageSize(readFileSync(f)), { width: w, height: h }, `${ext} 尺寸解析错误`)
+  }
+
+  // 必须在非图片输入上安全返回 null，而不是抛异常
+  assert.equal(imageSize(Buffer.from('this is definitely not an image')), null)
+  assert.equal(imageSize(Buffer.alloc(0)), null)
+  assert.equal(imageSize(null), null)
+})
+
+test('经符号链接路径调用时 main() 仍会运行（link 安装下的回归）', () => {
+  // 来历：DSH 以 `link:` 方式安装插件时，宿主用的是**符号链接路径**调用脚本，
+  // 而 Node 默认把 import.meta.url 解析成 realpath。早先的守卫写成
+  //   import.meta.url === pathToFileURL(process.argv[1]).href
+  // 两者不等 → main() 从不运行 → 进程**退出 0 但 stdout 为空**，
+  // 调用方只看到「stdout 不是合法 JSON」。这条测试就是把它钉住。
+  const tmp = mkdtempSync(path.join(tmpdir(), 'free-media-link-'))
+  const link = path.join(tmp, 'linked-pkg')
+  let linked = false
+  try {
+    if (process.platform === 'win32') {
+      // 目录 junction 不需要管理员权限，符号链接需要
+      linked = spawnSync('cmd', ['/c', 'mklink', '/J', link, PACKAGE_ROOT], { encoding: 'utf8' }).status === 0
+    } else {
+      symlinkSync(PACKAGE_ROOT, link, 'dir')
+      linked = true
+    }
+  } catch {
+    linked = false
+  }
+  if (!linked) {
+    console.log('      SKIP：本机无法创建目录链接，跳过该回归测试')
+    return
+  }
+
+  const viaLink = path.join(link, 'scripts', 'img.mjs')
+  const r = spawnSync(process.execPath, [viaLink, 'a test prompt', '--dry-run'], { encoding: 'utf8' })
+  assert.equal(r.status, 0, `退出码非 0：${r.stderr}`)
+  assert.ok(
+    r.stdout.trim().length > 0,
+    'stdout 为空 —— main() 没跑。这正是 link: 安装下的回归（realpath 与 argv[1] 不一致）。'
+  )
+  const out = JSON.parse(r.stdout)
+  assert.equal(out.ok, true)
+  assert.equal(out.dryRun, true)
 })
 
 test('SKILL.md 存在且 frontmatter 含必需字段', () => {

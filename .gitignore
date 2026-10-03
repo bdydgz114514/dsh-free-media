@@ -1,0 +1,6 @@
+﻿node_modules/
+*.tgz
+*.log
+.env
+*.key
+free-media-keys.json

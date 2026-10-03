@@ -1,0 +1,53 @@
+{
+  "name": "dsh-free-media",
+  "version": "0.1.1",
+  "description": "DSH 免费多模态三件套：零 Key 文生图（Pollinations）、零 Key 视频理解（ffmpeg 抽帧）、免费文生视频/图生视频（智谱 CogVideoX-Flash / Agnes）。注册 free_image_generate / video_extract_frames / free_video_generate 三个工具，并附带 free-media skill。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "image-generation",
+    "video-generation",
+    "video-understanding",
+    "multimodal",
+    "free",
+    "pollinations",
+    "cogvideox",
+    "ffmpeg"
+  ],
+  "engines": {
+    "node": ">=18",
+    "dsh": ">=0.2.0-rc.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "lib/",
+    "skills/",
+    "scripts/",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "check": "node --check lib/index.js && node --check scripts/img.mjs && node --check scripts/vframes.mjs && node --check scripts/vgen.mjs",
+    "test": "node test/plugin.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bdydgz114514/dsh-free-media.git"
+  },
+  "dependencies": {},
+  "peerDependencies": {}
+}

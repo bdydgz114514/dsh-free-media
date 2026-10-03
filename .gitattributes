@@ -1,0 +1,12 @@
+# 仓库内一律存 LF：脚本带 shebang，CRLF 会让 Linux/macOS 上的
+# `#!/usr/bin/env node\r` 变成非法解释器路径。
+* text=auto eol=lf
+
+# 二进制内容不要做行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.mp4 binary
+*.tgz binary

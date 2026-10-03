@@ -1,0 +1,10 @@
+# dsh-free-media 的挂载层。
+#
+# `dsh plugin add` 会读 package.json 的 dsh.bundle.patch 自动追加本文件到 profile，
+# 不需要手动改 profile 的 cordis.patch.yml。
+#
+# inject 不能省：少了它，apply 可能在 tools / skills 就绪之前跑，注册就会丢。
+- insert:
+    - id: free-media
+      name: 'dsh-free-media'
+      inject: [tools, skills]

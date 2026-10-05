@@ -19,6 +19,10 @@ import { apply, name, inject } from '../lib/index.js'
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
+// img.mjs 的纯函数（导出仅为可测；脚本顶层有 main 守卫，import 不会真的出图）
+const imgMod = await import(pathToFileURL(path.join(PACKAGE_ROOT, 'scripts', 'img.mjs')).href)
+const { detectFormat } = imgMod
+
 /** 收集注册结果的假 ctx。 */
 function mockCtx() {
   const skills = []
@@ -246,6 +250,47 @@ test('经符号链接路径调用时 main() 仍会运行（link 安装下的回�
   const out = JSON.parse(r.stdout)
   assert.equal(out.ok, true)
   assert.equal(out.dryRun, true)
+})
+
+test('detectFormat 按魔数认格式，不被 URL/扩展名骗', () => {
+  // 来历：智谱返回的图片 URL 以 `.png` 结尾，但字节是 JPEG（FF D8 FF E0）。
+  // 早先按 Content-Type/URL 决定扩展名，会把 JPEG 存成 .png，导致下游读图工具拒绝打开。
+  const hasFfmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf8' }).status === 0
+  if (!hasFfmpeg) {
+    console.log('      SKIP：本机没有 ffmpeg，跳过 detectFormat 测试')
+    return
+  }
+  const tmp = mkdtempSync(path.join(tmpdir(), 'free-media-fmt-'))
+  for (const [ext, wantExt, wantMime] of [['png', '.png', 'image/png'], ['jpg', '.jpg', 'image/jpeg']]) {
+    const f = path.join(tmp, `probe.${ext}`)
+    const r = spawnSync('ffmpeg', [
+      '-y', '-loglevel', 'error', '-f', 'lavfi',
+      '-i', 'testsrc=size=64x64:rate=1:duration=1', '-frames:v', '1', f,
+    ], { encoding: 'utf8' })
+    assert.equal(r.status, 0, `生成 ${ext} 失败：${r.stderr}`)
+    const fmt = detectFormat(readFileSync(f))
+    assert.equal(fmt?.ext, wantExt, `${ext} 的扩展名识别错误`)
+    assert.equal(fmt?.mime, wantMime, `${ext} 的 MIME 识别错误`)
+  }
+  // 非图片字节要安全返回 null，不能抛
+  assert.equal(detectFormat(Buffer.from('definitely not an image at all')), null)
+  assert.equal(detectFormat(Buffer.alloc(0)), null)
+  assert.equal(detectFormat(null), null)
+})
+
+test('尺寸校验：zhipu 硬拦，pollinations 只警告不拦', () => {
+  const { validateSize, PROVIDERS } = imgMod
+  const quiet = { verbose: false }
+  // 智谱：非 16 倍数 / 超像素上限 / 越界 → 必须抛（服务端真的会拒，错误码 1214）
+  assert.throws(() => validateSize(PROVIDERS.zhipu, 1024, 1023, quiet), /16 的整数倍/)
+  assert.throws(() => validateSize(PROVIDERS.zhipu, 2048, 2048, quiet), /超过上限/) // 4.19M > 2^21
+  assert.throws(() => validateSize(PROVIDERS.zhipu, 1024, 256, quiet), /512–2880/)
+  // 智谱：合法边界必须放过（2048x1024 正好 = 2^21）
+  assert.doesNotThrow(() => validateSize(PROVIDERS.zhipu, 2048, 1024, quiet))
+  assert.doesNotThrow(() => validateSize(PROVIDERS.zhipu, 1440, 1440, quiet))
+  // Pollinations：超额只能警告 —— 服务端会接受并静默缩小。
+  // 把它改成硬拦会让「要个大图、让服务端缩」这个原本可用的行为变成报错。
+  assert.doesNotThrow(() => validateSize(PROVIDERS.pollinations, 1920, 1080, quiet))
 })
 
 test('SKILL.md 存在且 frontmatter 含必需字段', () => {

@@ -1,7 +1,7 @@
 {
   "name": "dsh-free-media",
-  "version": "0.1.2",
-  "description": "DSH 免费多模态三件套：零 Key 文生图（Pollinations）、零 Key 视频理解（ffmpeg 抽帧）、免费文生视频/图生视频（智谱 CogVideoX-Flash / Agnes）。注册 free_image_generate / video_extract_frames / free_video_generate 三个工具，并附带 free-media skill。",
+  "version": "0.2.0",
+  "description": "DSH 免费多模态三件套：文生图（智谱 CogView-3-Flash 2.1MP / Pollinations 零 Key 兜底）、零 Key 视频理解（ffmpeg 抽帧）、免费文生视频/图生视频（智谱 CogVideoX-Flash / Agnes）。注册 free_image_generate / video_extract_frames / free_video_generate 三个工具，并附带 free-media skill。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
